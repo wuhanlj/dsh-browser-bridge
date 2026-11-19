@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fake AI chat</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        padding: 16px;
+        background: #f6f7f9;
+      }
+      #messages {
+        max-width: 720px;
+        margin: 0 auto 96px;
+      }
+      .message,
+      [data-user-message-bubble],
+      [data-markdown-text-style] {
+        margin: 12px 0;
+        padding: 10px 14px;
+        border-radius: 10px;
+        background: #fff;
+        white-space: pre-wrap;
+        line-height: 1.45;
+      }
+      .message.user,
+      [data-user-message-bubble] {
+        background: #e7f0fd;
+        text-align: end;
+      }
+      .composer {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        gap: 8px;
+        padding: 12px 16px;
+        background: #fff;
+        border-top: 1px solid #dde1e6;
+      }
+      #input-wrap {
+        flex: 1;
+      }
+      textarea,
+      [contenteditable='true'] {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 48px;
+        padding: 12px;
+        border: 1px solid #cfd6dd;
+        border-radius: 10px;
+        font: inherit;
+        background: #fff;
+      }
+      button {
+        padding: 0 18px;
+        border: 0;
+        border-radius: 10px;
+        background: #0b5cad;
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="messages"></div>
+    <div class="composer">
+      <div id="input-wrap"></div>
+      <button id="send" type="button">提交</button>
+    </div>
+    <script>
+      const params = new URLSearchParams(location.search)
+      const requested = params.get('mode')
+      const mode = requested === 'textarea' || requested === 'chatgpt' ? requested : 'contenteditable'
+      const wrap = document.getElementById('input-wrap')
+      const sendButton = document.getElementById('send')
+      const messages = document.getElementById('messages')
+
+      let input
+      if (mode === 'textarea') {
+        input = document.createElement('textarea')
+        input.setAttribute('placeholder', 'Ask anything')
+        sendButton.setAttribute('data-testid', 'send-button')
+        sendButton.textContent = '发送'
+      } else {
+        input = document.createElement('div')
+        input.setAttribute('contenteditable', 'true')
+        input.setAttribute('role', 'textbox')
+        if (mode === 'contenteditable') {
+          sendButton.setAttribute('aria-label', '发送')
+          sendButton.textContent = '发送'
+        }
+      }
+      wrap.appendChild(input)
+
+      const answer =
+        'ECHO:' + 'placeholder' + ' — the quick brown fox jumps over the lazy dog. '
+      const replyClass = mode === 'textarea' ? 'prose' : 'markdown'
+      let generating = false
+
+      function readInput() {
+        return input.value !== undefined ? input.value : input.innerText
+      }
+
+      function clearInput() {
+        if (input.value !== undefined) input.value = ''
+        else input.innerText = ''
+      }
+
+      function appendUserTurn(text) {
+        if (mode === 'chatgpt') {
+          // New ChatGPT DOM: the user bubble also matches [class*="message"].
+          const bubble = document.createElement('div')
+          bubble.setAttribute('data-user-message-bubble', 'true')
+          bubble.setAttribute('data-chatgpt-search-unit-key', 'local:user')
+          bubble.className = 'group/user-message bg-user-message text-user-message'
+          bubble.textContent = text
+          messages.appendChild(bubble)
+          return
+        }
+        const userMessage = document.createElement('div')
+        userMessage.className = 'message user'
+        userMessage.textContent = text
+        messages.appendChild(userMessage)
+      }
+
+      function appendAssistantTurn() {
+        const assistantMessage = document.createElement('div')
+        assistantMessage.className = 'message assistant'
+        if (mode === 'chatgpt') {
+          // New ChatGPT DOM: answer root carries data-markdown-text-style only.
+          const body = document.createElement('div')
+          body.setAttribute('data-markdown-text-style', 'assistant-message')
+          body.setAttribute('data-selected-text-overlay-target', '_r_ai_')
+          body.className = 'MarkdownRoot-rZKhxa'
+          assistantMessage.appendChild(body)
+          messages.appendChild(assistantMessage)
+          return body
+        }
+        const body = document.createElement('div')
+        body.className = replyClass
+        assistantMessage.appendChild(body)
+        messages.appendChild(assistantMessage)
+        return body
+      }
+
+      function send() {
+        const text = readInput().trim()
+        if (text === '' || generating) return
+        clearInput()
+        appendUserTurn(text)
+
+        generating = true
+        const full = 'ECHO:' + text + ' — ' + 'the quick brown fox jumps over the lazy dog. '.repeat(3).trim()
+
+        const startStreaming = () => {
+          const body = appendAssistantTurn()
+          let cursor = 0
+          const timer = setInterval(() => {
+            cursor += 12
+            body.textContent = full.slice(0, Math.min(cursor, full.length))
+            if (cursor >= full.length) {
+              body.textContent = full
+              clearInterval(timer)
+              generating = false
+            }
+          }, 80)
+        }
+
+        // New ChatGPT DOM shows a thinking pause before the answer container exists.
+        if (mode === 'chatgpt') setTimeout(startStreaming, 1200)
+        else startStreaming()
+      }
+
+      sendButton.addEventListener('click', send)
+      input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault()
+          send()
+        }
+      })
+    </script>
+  </body>
+</html>

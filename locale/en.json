@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Browser bridge",
+    "description": "Sends prompts to a web AI chat page in the user's running Chrome over CDP and returns the complete reply."
+  }
+}

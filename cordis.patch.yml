@@ -1,0 +1,9 @@
+- insert:
+    - id: browser-bridge
+      name: '@local/dsh-browser-bridge'
+      config:
+        cdpEndpoint: http://127.0.0.1:9222
+        firstWaitMs: 2000
+        pollIntervalMs: 2000
+        stableChecks: 3
+        timeoutMs: 180000

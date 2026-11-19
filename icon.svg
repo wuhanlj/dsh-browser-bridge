@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Browser bridge">
+  <rect width="64" height="64" rx="14" fill="#0b5cad"/>
+  <path d="M13 17h32a4 4 0 0 1 4 4v15a4 4 0 0 1-4 4H31l-9 7v-7h-9a4 4 0 0 1-4-4V21a4 4 0 0 1 4-4z" fill="#ffffff"/>
+  <circle cx="22" cy="28" r="3.2" fill="#0b5cad"/>
+  <circle cx="30" cy="28" r="3.2" fill="#0b5cad"/>
+  <circle cx="38" cy="28" r="3.2" fill="#0b5cad"/>
+  <path d="M44 43l9 7-9 7z" fill="#7fc4ff"/>
+</svg>
