@@ -265,6 +265,12 @@ async function testSiteSelectorProfiles() {
   // Muse declares an explicit empty stop list: generic stop detection is off.
   assert.deepEqual(muse.stop, [])
 
+  const manus = resolveSiteSelectors('https://manus.im/app/QyReeyVP86vZuuMt5KydBY', {})
+  assert.equal(manus.input[0], 'div.tiptap[contenteditable="true"]')
+  assert.ok(manus.send.includes('button[class*="accent-send-button"]'))
+  assert.equal(manus.reply[0], '[class*="latest-chat-reply"] [class*="chat-message-body"]')
+  assert.equal(manus.user[0], '[data-chat-question-bubble="true"]')
+
   // Subdomain suffix matching.
   const subdomain = resolveSiteSelectors('https://www.chatgpt.com/x', {})
   assert.ok(subdomain.reply.includes('[data-markdown-text-style="assistant-message"]'))

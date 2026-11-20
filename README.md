@@ -132,6 +132,7 @@ dsh plugin --profile desktop install "<插件目录>"
 | `chat.kimi.com` | contenteditable / textarea | `.markdown` 等 | 默认规则，未实测 |
 | `doubao.com` | textarea / contenteditable | `[class*="markdown"]` 等 | 默认规则，未实测 |
 | `muse.ai` | `textarea[aria-label="消息"]` | `[data-message-role="assistant"] .prose` | ✅ 本机实测通过 |
+| `manus.im` | `.tiptap`（ProseMirror） | `[class*="latest-chat-reply"]` 的 `.chat-message-body` | ✅ 本机实测通过 |
 | 其它站点 | 通用：`textarea` / `contenteditable` / `[role="textbox"]` | 通用：`markdown` / `prose` / `message` | 通用回退 |
 
 **自定义或新增站点**：在 `cordis.patch.yml` 的 `sites` 里按域名覆盖，只需写与该站点不同的部分，未写的字段继续用内置与通用规则：
@@ -154,6 +155,8 @@ dsh plugin --profile desktop install "<插件目录>"
 查找选择器：在目标页面按 F12，右键 AI 回复文字「检查」，复制其外层元素的 class / id / `data-*` 属性即可。`reply` 中每一项是一个 CSS 选择器组（内部可写逗号分隔的多个），越靠前优先级越高。
 
 > 有些站点会**常驻**一个「停止任务 / Stop」按钮（例如 `muse.ai` 的后台任务），如果把它当作「仍在生成」就会一直等到超时。内置 profile 可以用 `stop: []` 显式关闭停止按钮检测，纯靠文本长度稳定来判定结束。自定义站点同样支持：写 `stop: []` 即可关闭；写具体选择器则只认这些选择器。
+
+> `manus.im` 这类 Agent 产品会真的执行任务（包括操作云端电脑、调用工具），一次任务可能远长于普通聊天回复。默认 `timeoutMs` 是 180s，遇到长任务可在 patch 行或 `sites` 配置里调大；测试时建议在 prompt 里写明「不要执行任务、不要调用工具」。
 
 ## 配置（`cordis.patch.yml`）
 

@@ -158,6 +158,15 @@ export const BUILTIN_SITES: SiteSelectorMap = {
     // length stability only. An empty list disables generic stop detection.
     stop: [],
   },
+  'manus.im': {
+    input: ['div.tiptap[contenteditable="true"]', 'div[contenteditable="true"]'],
+    send: ['button[class*="accent-send-button"]'],
+    reply: [
+      '[class*="latest-chat-reply"] [class*="chat-message-body"]',
+      '[class*="latest-chat-reply"]',
+    ],
+    user: ['[data-chat-question-bubble="true"]'],
+  },
 }
 
 /** Leading role labels that some chat UIs render inside the message text. */
