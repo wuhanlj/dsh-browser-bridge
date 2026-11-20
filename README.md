@@ -164,6 +164,27 @@ dsh plugin --profile desktop install "<插件目录>"
 
 > `manus.im` 这类 Agent 产品会真的执行任务（包括操作云端电脑、调用工具），一次任务可能远长于普通聊天回复。默认 `timeoutMs` 是 180s，遇到长任务可在 patch 行或 `sites` 配置里调大；测试时建议在 prompt 里写明「不要执行任务、不要调用工具」。
 
+## 命名平台（`site` 别名）
+
+每个平台都有一个名字，模型可以直接按名字派活，不用贴 URL。调用 `browser_bridge` 时传 `site`：
+
+```json
+{ "site": "deepseek", "prompt": "帮我整理一份 DeepSeek 模型对比表" }
+```
+
+| 别名 | 平台 | 浏览器 |
+| --- | --- | --- |
+| `gpt` / `chatgpt` | ChatGPT | Chrome（9222） |
+| `muse` | Muse | Chrome（9222） |
+| `manus` | Manus | Chrome（9222） |
+| `qianwen` / `千问` / `tongyi` | 千问 | 360（9223） |
+| `deepseek` | DeepSeek | 360（9223） |
+| `doubao` / `豆包` | 豆包 | 360（9223） |
+| `yuanbao` / `元宝` | 元宝 | 360（9223） |
+| `jimeng` / `即梦` | 即梦（图片/视频生成，暂不支持文字调用） | — |
+
+规则：`url` 优先于 `site`；都不传时用默认浏览器（Chrome）的当前可见标签页。别名不区分大小写，中文名也可用；平台仍按域名自动路由到对应浏览器。
+
 ## 多浏览器：不同站点用不同浏览器
 
 一个 `cdpEndpoint` 就是一个浏览器实例。可以在 `sites` 里给某个站点单独指定浏览器，实现「千问/DeepSeek 用 360 浏览器，ChatGPT/Muse/Manus 用 Chrome」：

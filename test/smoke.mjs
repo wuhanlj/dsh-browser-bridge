@@ -29,10 +29,12 @@ import { fileURLToPath } from 'node:url'
 
 import {
   CONNECT_HELP,
+  SITE_ALIASES,
   TOOL_NAME,
   apply,
   cleanReplyText,
   disconnectBrowser,
+  resolveAliasUrl,
   resolveOptions,
   resolveSiteEndpoint,
   resolveSiteSelectors,
@@ -183,6 +185,7 @@ async function testRegistration() {
   assert.equal(registered?.output.schema.type, 'string')
   assert.deepEqual(registered?.parameters.required, ['prompt'])
   assert.deepEqual(registered?.parameters.properties.url.type, 'string')
+  assert.deepEqual(registered?.parameters.properties.site.type, 'string')
   assert.deepEqual(registered?.output.render({}, 'hello'), [{ type: 'text', text: 'hello' }])
   assert.equal(typeof disposed, 'boolean')
   log('registration ok')
@@ -332,6 +335,16 @@ async function testSiteSelectorProfiles() {
     fallbackEndpoint,
   )
   assert.equal(resolveSiteEndpoint(undefined, multiBrowser, fallbackEndpoint), fallbackEndpoint)
+
+  // Named platforms resolve to their URLs.
+  assert.equal(resolveAliasUrl('deepseek'), 'https://chat.deepseek.com/')
+  assert.equal(resolveAliasUrl('GPT'), 'https://chatgpt.com/')
+  assert.equal(resolveAliasUrl('千问'), 'https://www.qianwen.com/chat')
+  assert.equal(resolveAliasUrl('豆包'), 'https://www.doubao.com/chat/')
+  assert.equal(resolveAliasUrl('元宝'), 'https://yuanbao.tencent.com/')
+  assert.equal(resolveAliasUrl(undefined), undefined)
+  assert.equal(resolveAliasUrl('no-such-site'), undefined)
+  assert.ok(SITE_ALIASES.gpt && SITE_ALIASES.muse && SITE_ALIASES.manus)
   log('site selector profiles ok')
 }
 
@@ -355,6 +368,17 @@ async function testCustomSiteProfile() {
   const reply = await runBridge({ prompt, url }, options)
   assertReply(reply, prompt)
   log('custom site profile ok')
+}
+
+async function testUnsupportedAlias() {
+  await assert.rejects(
+    () => runBridge({ prompt: '生成一张图片', site: 'jimeng' }, OPTIONS),
+    (error) => {
+      assert.ok(error.message.includes('即梦'))
+      return true
+    },
+  )
+  log('unsupported alias message ok')
 }
 
 async function testConnectFailure() {
@@ -385,6 +409,7 @@ async function main() {
   await testSiteSelectorProfiles()
   await testReplyTextCleanup()
   await testCustomSiteProfile()
+  await testUnsupportedAlias()
   await testConnectFailure()
 
   log('all smoke checks passed')
