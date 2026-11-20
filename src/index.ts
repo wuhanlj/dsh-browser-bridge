@@ -148,6 +148,36 @@ export const BUILTIN_SITES: SiteSelectorMap = {
     user: ['[class*="message"][class*="user"]'],
     stop: ['button[aria-label*="停止"]'],
   },
+  'muse.ai': {
+    input: ['textarea[aria-label="消息"]', 'textarea'],
+    send: ['button[aria-label="发送"]'],
+    reply: ['[data-message-role="assistant"] .prose', '[data-message-role="assistant"]'],
+    user: ['[data-message-role="user"]'],
+    // Muse keeps a persistent "停止任务" button for background tasks, so a
+    // visible stop control says nothing about the current reply: rely on
+    // length stability only. An empty list disables generic stop detection.
+    stop: [],
+  },
+}
+
+/** Leading role labels that some chat UIs render inside the message text. */
+const REPLY_LABEL_PREFIX =
+  /^\s*(?:助手消息|用户消息|助手|用户|assistant message|assistant|user message|user|chatgpt|claude|gemini|kimi|doubao|deepseek)\s*[:：]\s*/i
+
+/**
+ * Normalize extracted reply text: drop widget placeholder tokens and any
+ * leading role label the page renders inside the message, then trim.
+ *
+ * Exported for tests.
+ */
+export function cleanReplyText(raw: string): string {
+  let text = raw.replace(/\[\[[a-z_]+_widget:[^\]]*\]\]/gi, ' ')
+  let previous = ''
+  while (text !== previous) {
+    previous = text
+    text = text.replace(REPLY_LABEL_PREFIX, '')
+  }
+  return text.trim()
 }
 
 /** Match a hostname against a selector map, preferring the longest suffix. */
@@ -194,12 +224,16 @@ export function resolveSiteSelectors(
   }
   const builtin = matchSite(BUILTIN_SITES, hostname)
   const custom = matchSite(sites, hostname)
+  // A site that declares `stop` (even an empty list) owns that decision: some
+  // providers keep a stop control visible while idle, which would otherwise
+  // prevent the reply from ever being considered complete.
+  const siteStop = custom?.stop ?? builtin?.stop
   return {
     input: mergeSelectors(builtin?.input, custom?.input, INPUT_SELECTORS),
     send: mergeSelectors(builtin?.send, custom?.send, SEND_SELECTORS),
     reply: mergeSelectors(builtin?.reply, custom?.reply, REPLY_SELECTORS),
     user: mergeSelectors(builtin?.user, custom?.user, USER_MESSAGE_SELECTORS),
-    stop: mergeSelectors(builtin?.stop, custom?.stop, STOP_SELECTORS),
+    stop: siteStop === undefined ? [...STOP_SELECTORS] : mergeSelectors(siteStop),
   }
 }
 
@@ -563,11 +597,11 @@ async function waitForReply(
       () => lastSnapshot,
     )
     lastSnapshot = snapshot
-    const current = snapshot.text.trim()
+    const current = cleanReplyText(snapshot.text)
     const generating = await isGenerating(page, selectors.stop)
 
     if (!started) {
-      if (snapshot.count !== baseline.count || current !== baseline.text.trim()) {
+      if (snapshot.count !== baseline.count || current !== cleanReplyText(baseline.text)) {
         started = true
         previous = current
         stable = 0

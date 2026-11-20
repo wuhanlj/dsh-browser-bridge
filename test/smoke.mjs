@@ -31,6 +31,7 @@ import {
   CONNECT_HELP,
   TOOL_NAME,
   apply,
+  cleanReplyText,
   disconnectBrowser,
   resolveOptions,
   resolveSiteSelectors,
@@ -257,6 +258,13 @@ async function testSiteSelectorProfiles() {
   const deepseek = resolveSiteSelectors('https://chat.deepseek.com/a/chat/s/1', {})
   assert.ok(deepseek.reply.includes('.ds-markdown'))
 
+  const muse = resolveSiteSelectors('https://muse.ai/', {})
+  assert.equal(muse.reply[0], '[data-message-role="assistant"] .prose')
+  assert.equal(muse.user[0], '[data-message-role="user"]')
+  assert.ok(muse.send.includes('button[aria-label="发送"]'))
+  // Muse declares an explicit empty stop list: generic stop detection is off.
+  assert.deepEqual(muse.stop, [])
+
   // Subdomain suffix matching.
   const subdomain = resolveSiteSelectors('https://www.chatgpt.com/x', {})
   assert.ok(subdomain.reply.includes('[data-markdown-text-style="assistant-message"]'))
@@ -276,6 +284,16 @@ async function testSiteSelectorProfiles() {
     '[data-markdown-text-style="assistant-message"], [data-message-author-role="assistant"]',
   )
   log('site selector profiles ok')
+}
+
+async function testReplyTextCleanup() {
+  assert.equal(cleanReplyText('助手消息：你好'), '你好')
+  assert.equal(cleanReplyText('用户消息：测试'), '测试')
+  assert.equal(cleanReplyText('  Assistant: hello  '), 'hello')
+  const messy = cleanReplyText('助手消息：助手消息：结果在这里 [[hatch_widget:widget-1]] 完成')
+  assert.ok(!messy.includes('hatch_widget'), `widget tokens should be removed, got: ${messy}`)
+  assert.ok(messy.startsWith('结果在这里'), `role labels should be stripped, got: ${messy}`)
+  log('reply text cleanup ok')
 }
 
 async function testCustomSiteProfile() {
@@ -316,6 +334,7 @@ async function main() {
   await testNewTabForOtherOrigin()
   await testNewChatGptDom()
   await testSiteSelectorProfiles()
+  await testReplyTextCleanup()
   await testCustomSiteProfile()
   await testConnectFailure()
 
