@@ -92,6 +92,8 @@ export interface SiteSelectors {
    * that the generic fallback would mistake for the answer.
    */
   genericFallback?: boolean
+  /** Per-site reply budget in milliseconds; overrides the global `timeoutMs`. */
+  timeoutMs?: number
 }
 
 /** Map of hostname (or suffix) to selector overrides. */
@@ -104,6 +106,8 @@ export type ResolvedSiteSelectors = {
   reply: string[]
   user: string[]
   stop: string[]
+  /** Per-site reply budget; absent means "use the global timeout". */
+  timeoutMs?: number
 }
 
 /**
@@ -174,6 +178,20 @@ export const BUILTIN_SITES: SiteSelectorMap = {
       '[class*="latest-chat-reply"]',
     ],
     user: ['[data-chat-question-bubble="true"]'],
+  },
+  'qianwen.com': {
+    input: ['[role="textbox"][contenteditable="true"]'],
+    send: ['button[aria-label="发送消息"]'],
+    // Answers render as `.qk-markdown` inside the answers wrapper; the
+    // question bubble uses a plain text container instead.
+    reply: [
+      '[data-chat-answers-wrap] .qk-markdown',
+      '[data-chat-answers-wrap] .answer-common-card:not(.answer-receiving-card)',
+    ],
+    user: ['[data-chat-question-wrap]'],
+    genericFallback: false,
+    // Qianwen can take several minutes to produce an answer.
+    timeoutMs: 600_000,
   },
 }
 
@@ -246,12 +264,14 @@ export function resolveSiteSelectors(
   // prevent the reply from ever being considered complete.
   const siteStop = custom?.stop ?? builtin?.stop
   const useGenericReply = (custom?.genericFallback ?? builtin?.genericFallback) !== false
+  const siteTimeout = custom?.timeoutMs ?? builtin?.timeoutMs
   return {
     input: mergeSelectors(builtin?.input, custom?.input, INPUT_SELECTORS),
     send: mergeSelectors(builtin?.send, custom?.send, SEND_SELECTORS),
     reply: mergeSelectors(builtin?.reply, custom?.reply, useGenericReply ? REPLY_SELECTORS : []),
     user: mergeSelectors(builtin?.user, custom?.user, USER_MESSAGE_SELECTORS),
     stop: siteStop === undefined ? [...STOP_SELECTORS] : mergeSelectors(siteStop),
+    ...(siteTimeout !== undefined ? { timeoutMs: siteTimeout } : {}),
   }
 }
 
@@ -592,6 +612,7 @@ async function waitForReply(
   selectors: ResolvedSiteSelectors,
   signal?: AbortSignal,
 ): Promise<string> {
+  const timeoutMs = selectors.timeoutMs ?? options.timeoutMs
   const startedAt = Date.now()
   await page.waitForTimeout(options.firstWaitMs)
 
@@ -602,9 +623,9 @@ async function waitForReply(
 
   for (;;) {
     if (signal?.aborted === true) throw new Error('browser_bridge 已被取消。')
-    if (Date.now() - startedAt > options.timeoutMs) {
+    if (Date.now() - startedAt > timeoutMs) {
       throw new Error(
-        `browser_bridge 等待 AI 回复超时（${Math.round(options.timeoutMs / 1000)}s）。\n` +
+        `browser_bridge 等待 AI 回复超时（${Math.round(timeoutMs / 1000)}s）。\n` +
           `页面 URL: ${page.url()}\n` +
           `最后一次检测: ${describeReplySnapshot(lastSnapshot)}\n` +
           `已尝试选择器: ${selectors.reply.join(', ')}`,

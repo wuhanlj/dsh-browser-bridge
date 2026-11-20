@@ -133,6 +133,7 @@ dsh plugin --profile desktop install "<插件目录>"
 | `doubao.com` | textarea / contenteditable | `[class*="markdown"]` 等 | 默认规则，未实测 |
 | `muse.ai` | `textarea[aria-label="消息"]` | `[data-message-role="assistant"] .prose` | ✅ 本机实测通过 |
 | `manus.im` | `.tiptap`（ProseMirror） | `[class*="latest-chat-reply"]` 的 `.chat-message-body` | ✅ 本机实测通过 |
+| `www.qianwen.com` | `[role="textbox"][contenteditable="true"]` | `[data-chat-answers-wrap] .qk-markdown` | ✅ 本机实测通过（首轮回复可能较慢，站点超时 10 分钟） |
 | 其它站点 | 通用：`textarea` / `contenteditable` / `[role="textbox"]` | 通用：`markdown` / `prose` / `message` | 通用回退 |
 
 **自定义或新增站点**：在 `cordis.patch.yml` 的 `sites` 里按域名覆盖，只需写与该站点不同的部分，未写的字段继续用内置与通用规则：
@@ -157,6 +158,8 @@ dsh plugin --profile desktop install "<插件目录>"
 > 有些站点会**常驻**一个「停止任务 / Stop」按钮（例如 `muse.ai` 的后台任务），如果把它当作「仍在生成」就会一直等到超时。内置 profile 可以用 `stop: []` 显式关闭停止按钮检测，纯靠文本长度稳定来判定结束。自定义站点同样支持：写 `stop: []` 即可关闭；写具体选择器则只认这些选择器。
 
 > 还有 `genericFallback: false`：当页面里存在与「回复」长得很像的容器时（例如 DeepSeek 的「深度思考」也用 `.ds-markdown` 渲染推理过程），关掉通用回退，只认该站点自己的 `reply` 选择器，避免把思考过程当成答案。
+
+> 站点还可以写 `timeoutMs` 覆盖全局超时（`www.qianwen.com` 内置为 600000ms，因为千问首轮回复可能很慢）；不写则用 patch 行里的全局 `timeoutMs`。
 
 > `manus.im` 这类 Agent 产品会真的执行任务（包括操作云端电脑、调用工具），一次任务可能远长于普通聊天回复。默认 `timeoutMs` 是 180s，遇到长任务可在 patch 行或 `sites` 配置里调大；测试时建议在 prompt 里写明「不要执行任务、不要调用工具」。
 

@@ -273,6 +273,13 @@ async function testSiteSelectorProfiles() {
   assert.equal(manus.reply[0], '[class*="latest-chat-reply"] [class*="chat-message-body"]')
   assert.equal(manus.user[0], '[data-chat-question-bubble="true"]')
 
+  const qianwen = resolveSiteSelectors('https://www.qianwen.com/chat/abc123', {})
+  assert.equal(qianwen.input[0], '[role="textbox"][contenteditable="true"]')
+  assert.ok(qianwen.send.includes('button[aria-label="发送消息"]'))
+  assert.equal(qianwen.reply[0], '[data-chat-answers-wrap] .qk-markdown')
+  assert.equal(qianwen.user[0], '[data-chat-question-wrap]')
+  assert.equal(qianwen.timeoutMs, 600_000)
+
   // Subdomain suffix matching.
   const subdomain = resolveSiteSelectors('https://www.chatgpt.com/x', {})
   assert.ok(subdomain.reply.includes('[data-markdown-text-style="assistant-message"]'))
