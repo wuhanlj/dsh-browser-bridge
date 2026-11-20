@@ -256,7 +256,9 @@ async function testSiteSelectorProfiles() {
   assert.ok(gemini.reply[0].startsWith('model-response'))
 
   const deepseek = resolveSiteSelectors('https://chat.deepseek.com/a/chat/s/1', {})
-  assert.ok(deepseek.reply.includes('.ds-markdown'))
+  // DeepSeek must not fall back to generic `.markdown` (reasoning blocks) rules.
+  assert.deepEqual(deepseek.reply, ['[class*="ds-assistant-message-main-content"]'])
+  assert.ok(deepseek.send.includes('div[role="button"].ds-button--primary:not(.ds-button--disabled)'))
 
   const muse = resolveSiteSelectors('https://muse.ai/', {})
   assert.equal(muse.reply[0], '[data-message-role="assistant"] .prose')
@@ -289,6 +291,12 @@ async function testSiteSelectorProfiles() {
     unknown.reply[0],
     '[data-markdown-text-style="assistant-message"], [data-message-author-role="assistant"]',
   )
+
+  // A site can opt out of the generic reply fallback entirely.
+  const noFallback = resolveSiteSelectors('http://127.0.0.1:1/', {
+    '127.0.0.1': { reply: ['.only-answer'], genericFallback: false },
+  })
+  assert.deepEqual(noFallback.reply, ['.only-answer'])
   log('site selector profiles ok')
 }
 

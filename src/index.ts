@@ -86,6 +86,12 @@ export interface SiteSelectors {
   user?: readonly string[]
   /** "Stop generating" control candidates. */
   stop?: readonly string[]
+  /**
+   * Append the generic reply groups after this site's `reply` list. Set to
+   * `false` when the page has look-alike containers (e.g. a reasoning panel)
+   * that the generic fallback would mistake for the answer.
+   */
+  genericFallback?: boolean
 }
 
 /** Map of hostname (or suffix) to selector overrides. */
@@ -128,11 +134,13 @@ export const BUILTIN_SITES: SiteSelectorMap = {
     stop: ['button[aria-label*="Stop response"]'],
   },
   'chat.deepseek.com': {
-    input: ['textarea', 'div[contenteditable="true"]'],
-    send: ['button[type="submit"]', 'div[role="button"][aria-disabled="false"]'],
-    reply: ['.ds-markdown', '.markdown'],
-    user: ['[class*="message"][class*="user"]'],
-    stop: ['div[role="button"][aria-label*="停止"]', 'button[aria-label*="停止"]'],
+    input: ['textarea[placeholder*="DeepSeek"]', 'textarea'],
+    send: ['div[role="button"].ds-button--primary:not(.ds-button--disabled)'],
+    // DeepSeek renders reasoning in `.ds-markdown` blocks inside `.ds-think-content`;
+    // only the final answer carries `ds-assistant-message-main-content`.
+    reply: ['[class*="ds-assistant-message-main-content"]'],
+    user: ['[class*="fbb737a4"]'],
+    genericFallback: false,
   },
   'chat.kimi.com': {
     input: ['div[contenteditable="true"]', 'textarea'],
@@ -237,10 +245,11 @@ export function resolveSiteSelectors(
   // providers keep a stop control visible while idle, which would otherwise
   // prevent the reply from ever being considered complete.
   const siteStop = custom?.stop ?? builtin?.stop
+  const useGenericReply = (custom?.genericFallback ?? builtin?.genericFallback) !== false
   return {
     input: mergeSelectors(builtin?.input, custom?.input, INPUT_SELECTORS),
     send: mergeSelectors(builtin?.send, custom?.send, SEND_SELECTORS),
-    reply: mergeSelectors(builtin?.reply, custom?.reply, REPLY_SELECTORS),
+    reply: mergeSelectors(builtin?.reply, custom?.reply, useGenericReply ? REPLY_SELECTORS : []),
     user: mergeSelectors(builtin?.user, custom?.user, USER_MESSAGE_SELECTORS),
     stop: siteStop === undefined ? [...STOP_SELECTORS] : mergeSelectors(siteStop),
   }
