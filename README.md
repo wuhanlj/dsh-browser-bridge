@@ -111,6 +111,47 @@ dsh plugin --profile desktop install "<插件目录>"
 
 返回值为该轮 AI 回复的完整纯文本。
 
+## 多服务商切换（ChatGPT / Claude / Gemini / DeepSeek / Kimi / 豆包…）
+
+桥接的是**同一个 Chrome**，不同 AI 站点各自保存登录态。所以「切换服务商」= 切换标签页/网址，不需要换浏览器：
+
+1. 在桥接 Chrome 里分别打开并登录各家网页，各留一个标签页；
+2. 调用 `browser_bridge` 时：
+   - 传 `url`：如 `https://claude.ai/chat/...`、`https://chat.deepseek.com/a/chat/s/...`（没有同源标签页时会自动新开一个）；
+   - 或不传 `url`：驱动当前**可见**标签页 —— 你在 Chrome 里切到哪家就用哪家；
+3. 同一时刻只驱动一个页面，多次调用之间可以随意换服务商。
+
+插件按域名自动匹配内置选择器 profile（子域同样生效）：
+
+| 站点 | 输入框 | 回复容器 | 状态 |
+| --- | --- | --- | --- |
+| `chatgpt.com` | `#prompt-textarea` / ProseMirror | `[data-markdown-text-style="assistant-message"]` | ✅ 本机实测通过 |
+| `claude.ai` | ProseMirror | `.font-claude-message` / `.prose` | 默认规则，未实测 |
+| `gemini.google.com` | `rich-textarea .ql-editor` | `model-response message-content` 等 | 默认规则，未实测 |
+| `chat.deepseek.com` | textarea / contenteditable | `.ds-markdown` | 默认规则，未实测 |
+| `chat.kimi.com` | contenteditable / textarea | `.markdown` 等 | 默认规则，未实测 |
+| `doubao.com` | textarea / contenteditable | `[class*="markdown"]` 等 | 默认规则，未实测 |
+| 其它站点 | 通用：`textarea` / `contenteditable` / `[role="textbox"]` | 通用：`markdown` / `prose` / `message` | 通用回退 |
+
+**自定义或新增站点**：在 `cordis.patch.yml` 的 `sites` 里按域名覆盖，只需写与该站点不同的部分，未写的字段继续用内置与通用规则：
+
+```yaml
+- insert:
+    - id: browser-bridge
+      name: '@local/dsh-browser-bridge'
+      config:
+        cdpEndpoint: http://127.0.0.1:9222
+        sites:
+          'example-ai.com':
+            input: ['textarea#chat-input']
+            send: ['button[aria-label="发送"]']
+            reply: ['.answer-markdown']
+            user: ['.my-question']
+            stop: ['button[aria-label*="停止"]']
+```
+
+查找选择器：在目标页面按 F12，右键 AI 回复文字「检查」，复制其外层元素的 class / id / `data-*` 属性即可。`reply` 中每一项是一个 CSS 选择器组（内部可写逗号分隔的多个），越靠前优先级越高。
+
 ## 配置（`cordis.patch.yml`）
 
 | 字段 | 默认 | 说明 |
@@ -120,6 +161,7 @@ dsh plugin --profile desktop install "<插件目录>"
 | `pollIntervalMs` | `2000` | 轮询间隔 |
 | `stableChecks` | `3` | 连续多少次长度不变判定结束 |
 | `timeoutMs` | `180000` | 单次调用总超时 |
+| `sites` | `{}` | 按域名的选择器覆盖（见「多服务商切换」） |
 
 ## 选择器策略
 
@@ -155,7 +197,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\make-portable-pack
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\make-portable-package.ps1
 ```
 
-产物在 `dist\dsh-browser-bridge-1.0.0.zip`（离线版为 `...-offline.zip`），把它拷到新电脑（U 盘 / 网盘均可）。
+产物在 `dist\dsh-browser-bridge-<version>.zip`（离线版为 `...-offline.zip`），把它拷到新电脑（U 盘 / 网盘均可）。
 
 **第 2 步：在新电脑解压并初始化**
 

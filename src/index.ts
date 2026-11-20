@@ -70,6 +70,139 @@ export const STOP_SELECTORS = [
   'button[aria-label*="Stop"]',
 ] as const
 
+/**
+ * Per-origin selector overrides. Keys are hostnames (or suffixes such as
+ * `example.com`); every field is prepended to the generic defaults, so an
+ * override only has to name what is different for that site.
+ */
+export interface SiteSelectors {
+  /** Chat input candidates. */
+  input?: readonly string[]
+  /** Send-button candidates. */
+  send?: readonly string[]
+  /** Reply-container groups (each string may hold a comma-separated list). */
+  reply?: readonly string[]
+  /** Selectors marking the user's own message rather than a reply. */
+  user?: readonly string[]
+  /** "Stop generating" control candidates. */
+  stop?: readonly string[]
+}
+
+/** Map of hostname (or suffix) to selector overrides. */
+export type SiteSelectorMap = Record<string, SiteSelectors>
+
+/** Fully merged selector lists for one page. */
+export type ResolvedSiteSelectors = {
+  input: string[]
+  send: string[]
+  reply: string[]
+  user: string[]
+  stop: string[]
+}
+
+/**
+ * Built-in selector profiles for widely used web AI chat pages. Only the
+ * ChatGPT profile is verified end to end; the others are best-effort defaults
+ * that can be adjusted through the `sites` configuration.
+ */
+export const BUILTIN_SITES: SiteSelectorMap = {
+  'chatgpt.com': {
+    input: ['#prompt-textarea', 'div[contenteditable="true"].ProseMirror'],
+    send: ['[data-testid="send-button"]'],
+    reply: ['[data-markdown-text-style="assistant-message"]'],
+    user: ['[data-user-message-bubble]', '[data-markdown-text-style="user-message"]'],
+    stop: ['[data-testid="stop-button"]'],
+  },
+  'claude.ai': {
+    input: ['div[contenteditable="true"].ProseMirror'],
+    send: ['button[aria-label="Send message"]', 'button[aria-label*="Send"]'],
+    reply: ['.font-claude-message', '.prose'],
+    user: ['[data-testid="user-message"]'],
+    stop: ['button[aria-label="Stop response"]', 'button[aria-label*="Stop"]'],
+  },
+  'gemini.google.com': {
+    input: ['rich-textarea .ql-editor[contenteditable="true"]', 'div[contenteditable="true"]'],
+    send: ['button[aria-label*="Send message"]', 'button.send-button'],
+    reply: ['model-response message-content', '.model-response-text', 'message-content'],
+    user: ['user-query', '.user-query-text'],
+    stop: ['button[aria-label*="Stop response"]'],
+  },
+  'chat.deepseek.com': {
+    input: ['textarea', 'div[contenteditable="true"]'],
+    send: ['button[type="submit"]', 'div[role="button"][aria-disabled="false"]'],
+    reply: ['.ds-markdown', '.markdown'],
+    user: ['[class*="message"][class*="user"]'],
+    stop: ['div[role="button"][aria-label*="停止"]', 'button[aria-label*="停止"]'],
+  },
+  'chat.kimi.com': {
+    input: ['div[contenteditable="true"]', 'textarea'],
+    send: ['button[class*="send"]', 'button[aria-label*="发送"]'],
+    reply: ['.markdown', '[class*="message"][class*="assistant"]'],
+    user: ['[class*="message"][class*="user"]'],
+    stop: ['button[aria-label*="停止"]'],
+  },
+  'doubao.com': {
+    input: ['textarea', 'div[contenteditable="true"]'],
+    send: ['button[class*="send"]', 'button[aria-label*="发送"]'],
+    reply: ['[class*="markdown"]', '[class*="message"][class*="assistant"]'],
+    user: ['[class*="message"][class*="user"]'],
+    stop: ['button[aria-label*="停止"]'],
+  },
+}
+
+/** Match a hostname against a selector map, preferring the longest suffix. */
+function matchSite(map: SiteSelectorMap, hostname: string): SiteSelectors | undefined {
+  const host = hostname.toLowerCase()
+  let bestKey = ''
+  let best: SiteSelectors | undefined
+  for (const [key, value] of Object.entries(map)) {
+    const site = key.toLowerCase()
+    if ((host === site || host.endsWith(`.${site}`)) && site.length > bestKey.length) {
+      bestKey = site
+      best = value
+    }
+  }
+  return best
+}
+
+/** Append every list, keeping the first occurrence of each selector. */
+function mergeSelectors(...lists: readonly (readonly string[] | undefined)[]): string[] {
+  const merged: string[] = []
+  for (const list of lists) {
+    for (const selector of list ?? []) {
+      if (!merged.includes(selector)) merged.push(selector)
+    }
+  }
+  return merged
+}
+
+/**
+ * Resolve the selector lists for one page: built-in profile first, then the
+ * user's `sites` overrides, then the generic defaults as a fallback.
+ *
+ * Exported for tests.
+ */
+export function resolveSiteSelectors(
+  target: string,
+  sites: SiteSelectorMap = {},
+): ResolvedSiteSelectors {
+  let hostname = target
+  try {
+    hostname = new URL(target).hostname
+  } catch {
+    /* target is already a hostname */
+  }
+  const builtin = matchSite(BUILTIN_SITES, hostname)
+  const custom = matchSite(sites, hostname)
+  return {
+    input: mergeSelectors(builtin?.input, custom?.input, INPUT_SELECTORS),
+    send: mergeSelectors(builtin?.send, custom?.send, SEND_SELECTORS),
+    reply: mergeSelectors(builtin?.reply, custom?.reply, REPLY_SELECTORS),
+    user: mergeSelectors(builtin?.user, custom?.user, USER_MESSAGE_SELECTORS),
+    stop: mergeSelectors(builtin?.stop, custom?.stop, STOP_SELECTORS),
+  }
+}
+
 /** Default CDP endpoint of a manually started Chrome. */
 const DEFAULT_CDP_ENDPOINT = 'http://127.0.0.1:9222'
 /** Delay after sending before the first reply-length probe. */
@@ -95,6 +228,8 @@ export interface BrowserBridgeConfig {
   stableChecks?: number
   /** Overall budget for one call, in milliseconds. */
   timeoutMs?: number
+  /** Per-site selector overrides, keyed by hostname or hostname suffix. */
+  sites?: SiteSelectorMap
 }
 
 /** Fully resolved options used by one bridge call. */
@@ -104,6 +239,7 @@ export interface ResolvedBrowserBridgeOptions {
   pollIntervalMs: number
   stableChecks: number
   timeoutMs: number
+  sites: SiteSelectorMap
 }
 
 /** Arguments accepted by the `browser_bridge` tool. */
@@ -171,6 +307,7 @@ export function resolveOptions(config: BrowserBridgeConfig = {}): ResolvedBrowse
     pollIntervalMs: positiveNumber(config.pollIntervalMs, DEFAULT_POLL_INTERVAL_MS),
     stableChecks: Math.max(1, Math.floor(positiveNumber(config.stableChecks, DEFAULT_STABLE_CHECKS))),
     timeoutMs: positiveNumber(config.timeoutMs, DEFAULT_TIMEOUT_MS),
+    sites: config.sites ?? {},
   }
 }
 
@@ -234,10 +371,13 @@ async function waitForVisible(
 }
 
 /** Find a visible, enabled send button, waiting briefly for a disabled one to enable. */
-async function findSendButton(page: Page): Promise<FoundElement | undefined> {
+async function findSendButton(
+  page: Page,
+  selectors: readonly string[],
+): Promise<FoundElement | undefined> {
   const deadline = Date.now() + ELEMENT_WAIT_MS
   while (Date.now() < deadline) {
-    for (const selector of SEND_SELECTORS) {
+    for (const selector of selectors) {
       const matches = page.locator(selector)
       const count = await matches.count().catch(() => 0)
       for (let index = 0; index < count; index += 1) {
@@ -264,7 +404,12 @@ async function readInputText(input: Locator): Promise<string> {
 }
 
 /** Type `prompt` into the chat input, using a DOM fallback for exotic editors. */
-async function enterPrompt(page: Page, input: Locator, prompt: string): Promise<void> {
+async function enterPrompt(
+  page: Page,
+  input: Locator,
+  prompt: string,
+  inputSelectors: readonly string[],
+): Promise<void> {
   await input.click().catch(() => {})
   await input.fill(prompt).catch(async () => {
     await page.keyboard.insertText(prompt).catch(() => {})
@@ -288,15 +433,15 @@ async function enterPrompt(page: Page, input: Locator, prompt: string): Promise<
   if (text.trim() === '') {
     throw new Error(
       `browser_bridge 找到输入框但无法写入内容。\n页面 URL: ${page.url()}\n` +
-        `输入框选择器: ${INPUT_SELECTORS.join(', ')}\n` +
+        `输入框选择器: ${inputSelectors.join(', ')}\n` +
         `请确认页面已加载完成、输入框未处于只读或禁用状态。`,
     )
   }
 }
 
 /** Click the send button, or press Enter when no button is available. */
-async function triggerSend(page: Page): Promise<string> {
-  const button = await findSendButton(page)
+async function triggerSend(page: Page, sendSelectors: readonly string[]): Promise<string> {
+  const button = await findSendButton(page, sendSelectors)
   if (button !== undefined) {
     await button.locator.click({ timeout: 5_000 })
     return `clicked ${button.selector}`
@@ -322,26 +467,29 @@ interface ReplySnapshot {
  * drop the user's own bubbles and any echo of the prompt, keep the innermost
  * visible nodes, and take the last one, which is the message being generated.
  *
- * New ChatGPT builds render the answer in
- * `[data-markdown-text-style="assistant-message"]` and the question in
- * `[data-user-message-bubble]` (with a `...user-message` class); older DOMs use
- * `[data-message-author-role]`, `.markdown`, or `.prose`.
+ * Selector groups and user markers come from the resolved site profile, so a
+ * different provider can add or replace them through configuration.
  */
-function readReplySnapshot(page: Page, prompt: string): Promise<ReplySnapshot> {
-  const groups = REPLY_SELECTORS.map((selector) => selector)
-  const userMarkers = USER_MESSAGE_SELECTORS.map((selector) => selector)
+function readReplySnapshot(
+  page: Page,
+  prompt: string,
+  replyGroups: readonly string[],
+  userMarkers: readonly string[],
+): Promise<ReplySnapshot> {
+  const groups = [...replyGroups]
+  const markers = [...userMarkers]
 
   return page.evaluate(
-    ({ groups, userMarkers, sentPrompt }) => {
+    ({ groups: groupList, userMarkers: markerList, sentPrompt }) => {
       const isVisible = (element: HTMLElement): boolean => {
         const rect = element.getBoundingClientRect()
         return rect.width > 0 && rect.height > 0
       }
       const isUserSide = (element: HTMLElement): boolean =>
-        userMarkers.some((marker) => element.closest(marker) !== null) ||
+        markerList.some((marker) => element.closest(marker) !== null) ||
         /user-message/.test(String(element.className ?? ''))
 
-      for (const selector of groups) {
+      for (const selector of groupList) {
         const candidates = Array.from(document.querySelectorAll<HTMLElement>(selector))
           .filter((element) => isVisible(element))
           .filter((element) => !isUserSide(element))
@@ -355,12 +503,12 @@ function readReplySnapshot(page: Page, prompt: string): Promise<ReplySnapshot> {
       }
       return { count: 0, text: '' }
     },
-    { groups, userMarkers, sentPrompt: prompt },
+    { groups, userMarkers: markers, sentPrompt: prompt },
   )
 }
 
 /** Whether a "stop generating" control is visible right now. */
-function isGenerating(page: Page): Promise<boolean> {
+function isGenerating(page: Page, stopSelectors: readonly string[]): Promise<boolean> {
   return page
     .evaluate((selectors) => {
       for (const selector of selectors) {
@@ -370,7 +518,7 @@ function isGenerating(page: Page): Promise<boolean> {
         }
       }
       return false
-    }, STOP_SELECTORS as unknown as string[])
+    }, [...stopSelectors])
     .catch(() => false)
 }
 
@@ -389,6 +537,7 @@ async function waitForReply(
   baseline: ReplySnapshot,
   prompt: string,
   options: ResolvedBrowserBridgeOptions,
+  selectors: ResolvedSiteSelectors,
   signal?: AbortSignal,
 ): Promise<string> {
   const startedAt = Date.now()
@@ -406,14 +555,16 @@ async function waitForReply(
         `browser_bridge 等待 AI 回复超时（${Math.round(options.timeoutMs / 1000)}s）。\n` +
           `页面 URL: ${page.url()}\n` +
           `最后一次检测: ${describeReplySnapshot(lastSnapshot)}\n` +
-          `已尝试选择器: ${REPLY_SELECTORS.join(', ')}`,
+          `已尝试选择器: ${selectors.reply.join(', ')}`,
       )
     }
 
-    const snapshot = await readReplySnapshot(page, prompt).catch(() => lastSnapshot)
+    const snapshot = await readReplySnapshot(page, prompt, selectors.reply, selectors.user).catch(
+      () => lastSnapshot,
+    )
     lastSnapshot = snapshot
     const current = snapshot.text.trim()
-    const generating = await isGenerating(page)
+    const generating = await isGenerating(page, selectors.stop)
 
     if (!started) {
       if (snapshot.count !== baseline.count || current !== baseline.text.trim()) {
@@ -576,16 +727,21 @@ export async function runBridge(
   const page = await resolvePage(context, args.url)
   if (signal?.aborted === true) throw new Error('browser_bridge 已被取消。')
 
-  const input = await waitForVisible(page, INPUT_SELECTORS, ELEMENT_WAIT_MS)
-  if (input === undefined) throw await missingElementError('输入框', page, INPUT_SELECTORS)
+  // Selectors depend on the provider that hosts the chosen tab.
+  const selectors = resolveSiteSelectors(page.url(), options.sites)
 
-  const baseline = await readReplySnapshot(page, prompt).catch(() => ({ count: 0, text: '' }))
-  await enterPrompt(page, input.locator, prompt)
-  await triggerSend(page)
+  const input = await waitForVisible(page, selectors.input, ELEMENT_WAIT_MS)
+  if (input === undefined) throw await missingElementError('输入框', page, selectors.input)
 
-  const reply = await waitForReply(page, baseline, prompt, options, signal)
+  const baseline = await readReplySnapshot(page, prompt, selectors.reply, selectors.user).catch(
+    () => ({ count: 0, text: '' }),
+  )
+  await enterPrompt(page, input.locator, prompt, selectors.input)
+  await triggerSend(page, selectors.send)
+
+  const reply = await waitForReply(page, baseline, prompt, options, selectors, signal)
   if (reply === '' || reply === prompt) {
-    throw await missingElementError('回复内容', page, REPLY_SELECTORS)
+    throw await missingElementError('回复内容', page, selectors.reply)
   }
   return reply
 }

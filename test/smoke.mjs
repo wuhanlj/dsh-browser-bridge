@@ -11,7 +11,9 @@
  *   5. new-tab creation for a different origin
  *   6. ChatGPT's redesigned DOM (`data-markdown-text-style` answer root, delayed
  *      stream start, user bubble that also matches `[class*="message"]`)
- *   7. unreachable CDP endpoint error message
+ *   7. built-in per-provider selector profiles and custom `sites` overrides
+ *      (selector resolution + a provider whose DOM only the config knows)
+ *   8. unreachable CDP endpoint error message
  *
  * Run with `npm run smoke` (needs Chrome or Edge; no Playwright browsers).
  */
@@ -31,6 +33,7 @@ import {
   apply,
   disconnectBrowser,
   resolveOptions,
+  resolveSiteSelectors,
   runBridge,
 } from '../lib/index.js'
 
@@ -238,6 +241,55 @@ async function testNewChatGptDom() {
   log('new ChatGPT DOM (assistant-message) ok')
 }
 
+async function testSiteSelectorProfiles() {
+  const chatgpt = resolveSiteSelectors('https://chatgpt.com/c/abc', {})
+  assert.ok(chatgpt.reply[0].includes('[data-markdown-text-style="assistant-message"]'))
+  assert.ok(chatgpt.input.includes('#prompt-textarea'))
+  assert.ok(chatgpt.stop.includes('[data-testid="stop-button"]'))
+
+  const claude = resolveSiteSelectors('https://claude.ai/chat/xyz', {})
+  assert.ok(claude.reply.includes('.font-claude-message'))
+  assert.ok(claude.stop.includes('button[aria-label="Stop response"]'))
+
+  const gemini = resolveSiteSelectors('https://gemini.google.com/app/1', {})
+  assert.ok(gemini.reply[0].startsWith('model-response'))
+
+  const deepseek = resolveSiteSelectors('https://chat.deepseek.com/a/chat/s/1', {})
+  assert.ok(deepseek.reply.includes('.ds-markdown'))
+
+  // Subdomain suffix matching.
+  const subdomain = resolveSiteSelectors('https://www.chatgpt.com/x', {})
+  assert.ok(subdomain.reply.includes('[data-markdown-text-style="assistant-message"]'))
+
+  // User overrides run first and keep the generic fallbacks.
+  const custom = resolveSiteSelectors('http://127.0.0.1:1234/?mode=custom', {
+    '127.0.0.1': { reply: ['.custom-assistant-text'], user: ['.custom-user'] },
+  })
+  assert.equal(custom.reply[0], '.custom-assistant-text')
+  assert.ok(custom.reply.includes('.markdown, .prose'))
+  assert.equal(custom.user[0], '.custom-user')
+
+  // Unknown hosts fall back to the generic lists only.
+  const unknown = resolveSiteSelectors('https://example.com/', {})
+  assert.equal(
+    unknown.reply[0],
+    '[data-markdown-text-style="assistant-message"], [data-message-author-role="assistant"]',
+  )
+  log('site selector profiles ok')
+}
+
+async function testCustomSiteProfile() {
+  const url = `${baseUrlA}?mode=custom`
+  const prompt = 'sixth probe through a custom site profile'
+  const options = {
+    ...OPTIONS,
+    sites: { '127.0.0.1': { reply: ['.custom-assistant-text'], user: ['.custom-user'] } },
+  }
+  const reply = await runBridge({ prompt, url }, options)
+  assertReply(reply, prompt)
+  log('custom site profile ok')
+}
+
 async function testConnectFailure() {
   const options = resolveOptions({ cdpEndpoint: 'http://127.0.0.1:1', timeoutMs: 5_000 })
   await assert.rejects(
@@ -263,6 +315,8 @@ async function main() {
   await testActiveTabFallback()
   await testNewTabForOtherOrigin()
   await testNewChatGptDom()
+  await testSiteSelectorProfiles()
+  await testCustomSiteProfile()
   await testConnectFailure()
 
   log('all smoke checks passed')

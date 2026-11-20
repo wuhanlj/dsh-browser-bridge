@@ -7,3 +7,11 @@
         pollIntervalMs: 2000
         stableChecks: 3
         timeoutMs: 180000
+        # 按站点覆盖选择器（可选）。键是域名或域名后缀，未写的字段沿用内置/通用规则。
+        # sites:
+        #   'example-ai.com':
+        #     input: ['textarea#chat-input']
+        #     send: ['button[aria-label="发送"]']
+        #     reply: ['.answer-markdown']
+        #     user: ['.my-question']
+        #     stop: ['button[aria-label*="停止"]']
