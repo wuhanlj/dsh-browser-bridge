@@ -7,11 +7,19 @@
         pollIntervalMs: 2000
         stableChecks: 3
         timeoutMs: 180000
-        # 按站点覆盖选择器（可选）。键是域名或域名后缀，未写的字段沿用内置/通用规则。
-        # sites:
+        # 按站点指定浏览器（每个 cdpEndpoint 对应一个浏览器实例）。
+        # chrome=9222（启动脚本 start-chrome.ps1），360 安全浏览器=9223（start-360.ps1）。
+        sites:
+          'www.qianwen.com':
+            cdpEndpoint: http://127.0.0.1:9223
+          'chat.deepseek.com':
+            cdpEndpoint: http://127.0.0.1:9223
+        # 其余可选覆盖：
         #   'example-ai.com':
         #     input: ['textarea#chat-input']
         #     send: ['button[aria-label="发送"]']
         #     reply: ['.answer-markdown']
         #     user: ['.my-question']
         #     stop: ['button[aria-label*="停止"]']
+        #     genericFallback: false
+        #     timeoutMs: 300000

@@ -25,10 +25,11 @@ export const inject = ['tools']
 /** Tool name exposed to the model. */
 export const TOOL_NAME = 'browser_bridge'
 
-/** Message shown when the CDP endpoint is unreachable. */
+/** Message shown when the CDP endpoint is unreachable. `<PORT>` is filled in. */
 export const CONNECT_HELP =
-  `无法通过 CDP 连接到 Chrome。请先通过命令行启动 Chrome 并添加参数 --remote-debugging-port=9222，然后手动登录 AI 网页账号。` +
-  `\n示例（Windows）："C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222 --user-data-dir="%USERPROFILE%\\chrome-ai-profile"`
+  `无法通过 CDP 连接到浏览器。请先通过命令行启动对应浏览器并添加参数 --remote-debugging-port=<PORT>，然后手动登录 AI 网页账号。` +
+  `\n示例（Chrome）："C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --remote-debugging-port=9222 --user-data-dir="%USERPROFILE%\\chrome-ai-profile"` +
+  `\n示例（360 安全浏览器）：<安装目录>\\new_360se.exe --remote-debugging-port=9223 --user-data-dir="%USERPROFILE%\\360-ai-profile"`
 
 /** Candidate chat-input selectors, in priority order. */
 export const INPUT_SELECTORS = [
@@ -94,6 +95,11 @@ export interface SiteSelectors {
   genericFallback?: boolean
   /** Per-site reply budget in milliseconds; overrides the global `timeoutMs`. */
   timeoutMs?: number
+  /**
+   * CDP endpoint of the browser that hosts this site. Lets different sites live
+   * in different browsers (e.g. Chrome on 9222, 360 browser on 9223).
+   */
+  cdpEndpoint?: string
 }
 
 /** Map of hostname (or suffix) to selector overrides. */
@@ -108,6 +114,8 @@ export type ResolvedSiteSelectors = {
   stop: string[]
   /** Per-site reply budget; absent means "use the global timeout". */
   timeoutMs?: number
+  /** Per-site CDP endpoint; absent means "use the global endpoint". */
+  cdpEndpoint?: string
 }
 
 /**
@@ -265,6 +273,7 @@ export function resolveSiteSelectors(
   const siteStop = custom?.stop ?? builtin?.stop
   const useGenericReply = (custom?.genericFallback ?? builtin?.genericFallback) !== false
   const siteTimeout = custom?.timeoutMs ?? builtin?.timeoutMs
+  const siteEndpoint = custom?.cdpEndpoint ?? builtin?.cdpEndpoint
   return {
     input: mergeSelectors(builtin?.input, custom?.input, INPUT_SELECTORS),
     send: mergeSelectors(builtin?.send, custom?.send, SEND_SELECTORS),
@@ -272,7 +281,31 @@ export function resolveSiteSelectors(
     user: mergeSelectors(builtin?.user, custom?.user, USER_MESSAGE_SELECTORS),
     stop: siteStop === undefined ? [...STOP_SELECTORS] : mergeSelectors(siteStop),
     ...(siteTimeout !== undefined ? { timeoutMs: siteTimeout } : {}),
+    ...(siteEndpoint !== undefined ? { cdpEndpoint: siteEndpoint } : {}),
   }
+}
+
+/**
+ * Pick the CDP endpoint for a requested page before connecting: a site can
+ * declare its own `cdpEndpoint`, otherwise the global endpoint is used.
+ *
+ * Exported for tests.
+ */
+export function resolveSiteEndpoint(
+  target: string | undefined,
+  sites: SiteSelectorMap,
+  fallback: string,
+): string {
+  if (target === undefined || target.trim() === '') return fallback
+  let hostname = target.trim()
+  try {
+    hostname = new URL(target.trim()).hostname
+  } catch {
+    /* target is already a hostname */
+  }
+  const builtin = matchSite(BUILTIN_SITES, hostname)
+  const custom = matchSite(sites, hostname)
+  return custom?.cdpEndpoint ?? builtin?.cdpEndpoint ?? fallback
 }
 
 /** Default CDP endpoint of a manually started Chrome. */
@@ -662,45 +695,53 @@ async function waitForReply(
 // Browser connection
 // ---------------------------------------------------------------------------
 
-/** Connect to the user's Chrome over CDP, keeping the existing session and logins. */
+/** Connect to a browser over CDP, keeping the existing session and logins. */
 async function connectBrowser(endpoint: string): Promise<Browser> {
   try {
     return await chromium.connectOverCDP(endpoint, { timeout: 15_000 })
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
-    throw new Error(`browser_bridge: ${CONNECT_HELP}\nCDP 端点: ${endpoint}\n原始错误: ${detail}`)
+    let port = '9222'
+    try {
+      port = new URL(endpoint).port || port
+    } catch {
+      /* keep the default port in the hint */
+    }
+    throw new Error(
+      `browser_bridge: ${CONNECT_HELP.replace('<PORT>', port)}\nCDP 端点: ${endpoint}\n原始错误: ${detail}`,
+    )
   }
 }
 
-/** Cached CDP connection so tabs created by one call survive into the next. */
-let cachedConnection: { endpoint: string; browser: Browser } | undefined
+/** Cached CDP connections keyed by endpoint, so tabs survive between calls. */
+const cachedConnections = new Map<string, Browser>()
 
-/** Reuse the live CDP connection, reconnecting when Chrome restarted or closed. */
+/** Reuse the live CDP connection, reconnecting when the browser restarted. */
 async function acquireBrowser(endpoint: string): Promise<Browser> {
-  const cached = cachedConnection
-  if (cached !== undefined && cached.endpoint === endpoint) {
-    if (cached.browser.isConnected()) {
+  const cached = cachedConnections.get(endpoint)
+  if (cached !== undefined) {
+    if (cached.isConnected()) {
       try {
-        cached.browser.contexts()
-        return cached.browser
+        cached.contexts()
+        return cached
       } catch {
         /* the socket is gone; fall through and reconnect */
       }
     }
-    await cached.browser.close().catch(() => {})
-    cachedConnection = undefined
+    await cached.close().catch(() => {})
+    cachedConnections.delete(endpoint)
   }
 
   const browser = await connectBrowser(endpoint)
-  cachedConnection = { endpoint, browser }
+  cachedConnections.set(endpoint, browser)
   return browser
 }
 
-/** Disconnect the cached CDP session; the user's Chrome keeps running. */
+/** Disconnect every cached CDP session; the user's browsers keep running. */
 export async function disconnectBrowser(): Promise<void> {
-  const cached = cachedConnection
-  cachedConnection = undefined
-  if (cached !== undefined) await cached.browser.close().catch(() => {})
+  const browsers = [...cachedConnections.values()]
+  cachedConnections.clear()
+  await Promise.all(browsers.map((browser) => browser.close().catch(() => {})))
 }
 
 /** Whether a page reports itself as the visible tab. */
@@ -791,7 +832,9 @@ export async function runBridge(
   const prompt = args.prompt.trim()
   if (prompt === '') throw new Error('browser_bridge: prompt 不能为空。')
 
-  const browser = await acquireBrowser(options.cdpEndpoint)
+  // A site may live in its own browser; pick the endpoint before connecting.
+  const endpoint = resolveSiteEndpoint(args.url, options.sites, options.cdpEndpoint)
+  const browser = await acquireBrowser(endpoint)
   const context = browser.contexts()[0]
   if (context === undefined) {
     throw new Error('browser_bridge 已连接到 Chrome，但没有可用的浏览器上下文（contexts()[0] 为空）。')

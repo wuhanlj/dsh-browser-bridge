@@ -34,6 +34,7 @@ import {
   cleanReplyText,
   disconnectBrowser,
   resolveOptions,
+  resolveSiteEndpoint,
   resolveSiteSelectors,
   runBridge,
 } from '../lib/index.js'
@@ -304,6 +305,19 @@ async function testSiteSelectorProfiles() {
     '127.0.0.1': { reply: ['.only-answer'], genericFallback: false },
   })
   assert.deepEqual(noFallback.reply, ['.only-answer'])
+
+  // Sites can be routed to different browsers by CDP endpoint.
+  const fallbackEndpoint = 'http://127.0.0.1:9222'
+  const multiBrowser = { 'qianwen.com': { cdpEndpoint: 'http://127.0.0.1:9223' } }
+  assert.equal(
+    resolveSiteEndpoint('https://www.qianwen.com/chat/x', multiBrowser, fallbackEndpoint),
+    'http://127.0.0.1:9223',
+  )
+  assert.equal(
+    resolveSiteEndpoint('https://chat.deepseek.com/a/chat/s/1', multiBrowser, fallbackEndpoint),
+    fallbackEndpoint,
+  )
+  assert.equal(resolveSiteEndpoint(undefined, multiBrowser, fallbackEndpoint), fallbackEndpoint)
   log('site selector profiles ok')
 }
 
@@ -334,7 +348,7 @@ async function testConnectFailure() {
   await assert.rejects(
     () => runBridge({ prompt: 'nope' }, options),
     (error) => {
-      assert.ok(error.message.includes(CONNECT_HELP.split('\n')[0]))
+      assert.ok(error.message.includes('无法通过 CDP 连接到浏览器'))
       assert.ok(error.message.includes('--remote-debugging-port=9222'))
       return true
     },

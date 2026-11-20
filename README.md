@@ -163,6 +163,32 @@ dsh plugin --profile desktop install "<插件目录>"
 
 > `manus.im` 这类 Agent 产品会真的执行任务（包括操作云端电脑、调用工具），一次任务可能远长于普通聊天回复。默认 `timeoutMs` 是 180s，遇到长任务可在 patch 行或 `sites` 配置里调大；测试时建议在 prompt 里写明「不要执行任务、不要调用工具」。
 
+## 多浏览器：不同站点用不同浏览器
+
+一个 `cdpEndpoint` 就是一个浏览器实例。可以在 `sites` 里给某个站点单独指定浏览器，实现「千问/DeepSeek 用 360 浏览器，ChatGPT/Muse/Manus 用 Chrome」：
+
+```yaml
+config:
+  cdpEndpoint: http://127.0.0.1:9222          # 默认浏览器（Chrome）
+  sites:
+    'www.qianwen.com':
+      cdpEndpoint: http://127.0.0.1:9223      # 360 安全浏览器
+    'chat.deepseek.com':
+      cdpEndpoint: http://127.0.0.1:9223
+```
+
+- Chrome：`scripts\start-chrome.ps1`（9222，profile `%USERPROFILE%\chrome-ai-profile`）
+- 360 安全浏览器：`scripts\start-360.ps1`（9223，profile `%USERPROFILE%\360-ai-profile`，支持 `--remote-debugging-port`）
+- 双击 `Start-Browser-Bridge.cmd` 会**依次启动两个浏览器**（桌面快捷方式指向的就是它）。
+
+规则：
+
+1. 传了 `url` 时，先按 `url` 的域名决定连哪个 `cdpEndpoint`，再在该浏览器里找/开对应标签页；
+2. 不传 `url` 时，用默认 `cdpEndpoint` 的当前可见标签页；
+3. 两个浏览器各自保存登录态，**每个浏览器里第一次用某站点需要登录一次**。
+
+> 注意：360 安全浏览器需要较新版本（实测 16.1，Chromium 132）才支持 `--remote-debugging-port` 和 `--user-data-dir`；如果启动后 9223 无响应，说明该版本不支持调试端口。
+
 ## 配置（`cordis.patch.yml`）
 
 | 字段 | 默认 | 说明 |
