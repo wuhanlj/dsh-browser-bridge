@@ -281,6 +281,11 @@ async function testSiteSelectorProfiles() {
   assert.equal(qianwen.user[0], '[data-chat-question-wrap]')
   assert.equal(qianwen.timeoutMs, 600_000)
 
+  const doubao = resolveSiteSelectors('https://www.doubao.com/chat/abc123', {})
+  assert.equal(doubao.input[0], '.tiptap[contenteditable="true"]')
+  assert.ok(doubao.send.includes('[data-testid="chat_input_send_button"]'))
+  assert.equal(doubao.reply[0], '[data-reply-message="true"] [data-testid="message_text_content"]')
+
   // Subdomain suffix matching.
   const subdomain = resolveSiteSelectors('https://www.chatgpt.com/x', {})
   assert.ok(subdomain.reply.includes('[data-markdown-text-style="assistant-message"]'))

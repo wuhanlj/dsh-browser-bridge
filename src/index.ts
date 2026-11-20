@@ -162,11 +162,14 @@ export const BUILTIN_SITES: SiteSelectorMap = {
     stop: ['button[aria-label*="停止"]'],
   },
   'doubao.com': {
-    input: ['textarea', 'div[contenteditable="true"]'],
-    send: ['button[class*="send"]', 'button[aria-label*="发送"]'],
-    reply: ['[class*="markdown"]', '[class*="message"][class*="assistant"]'],
-    user: ['[class*="message"][class*="user"]'],
-    stop: ['button[aria-label*="停止"]'],
+    input: ['.tiptap[contenteditable="true"]', '[data-testid="chat_input"] [contenteditable="true"]'],
+    send: ['[data-testid="chat_input_send_button"]', 'button[aria-label="发送"]'],
+    reply: [
+      '[data-reply-message="true"] [data-testid="message_text_content"]',
+      '[data-message-role="assistant"] [data-testid="message_text_content"]',
+    ],
+    user: ['[data-message-role="user"]'],
+    genericFallback: false,
   },
   'muse.ai': {
     input: ['textarea[aria-label="消息"]', 'textarea'],
@@ -772,6 +775,9 @@ async function resolvePage(context: BrowserContext, url?: string): Promise<Page>
       const sameOrigin = pages.find((page) => originKey(page.url()) === origin)
       if (sameOrigin !== undefined) {
         await sameOrigin.goto(requested, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+        // Single-page apps re-render after navigation; give the new DOM a moment
+        // so the composer we interact with is the settled one.
+        await sameOrigin.waitForTimeout(1_000)
         return sameOrigin
       }
     }
@@ -779,6 +785,7 @@ async function resolvePage(context: BrowserContext, url?: string): Promise<Page>
     const blank = pages.find((page) => page.url() === 'about:blank')
     const reusable = blank ?? (await context.newPage())
     await reusable.goto(requested, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+    await reusable.waitForTimeout(1_000)
     return reusable
   }
 
@@ -848,6 +855,8 @@ export async function runBridge(
 
   const input = await waitForVisible(page, selectors.input, ELEMENT_WAIT_MS)
   if (input === undefined) throw await missingElementError('输入框', page, selectors.input)
+  // The app may still be finishing its render; interact only with a settled editor.
+  await sleep(300)
 
   const baseline = await readReplySnapshot(page, prompt, selectors.reply, selectors.user).catch(
     () => ({ count: 0, text: '' }),

@@ -130,7 +130,7 @@ dsh plugin --profile desktop install "<插件目录>"
 | `gemini.google.com` | `rich-textarea .ql-editor` | `model-response message-content` 等 | 默认规则，未实测 |
 | `chat.deepseek.com` | `textarea[placeholder*="DeepSeek"]` | `[class*="ds-assistant-message-main-content"]` | ✅ 本机实测通过 |
 | `chat.kimi.com` | contenteditable / textarea | `.markdown` 等 | 默认规则，未实测 |
-| `doubao.com` | textarea / contenteditable | `[class*="markdown"]` 等 | 默认规则，未实测 |
+| `doubao.com` | `.tiptap`（ProseMirror） | `[data-reply-message="true"]` 的 `[data-testid="message_text_content"]` | ✅ 本机实测通过（360 浏览器） |
 | `muse.ai` | `textarea[aria-label="消息"]` | `[data-message-role="assistant"] .prose` | ✅ 本机实测通过 |
 | `manus.im` | `.tiptap`（ProseMirror） | `[class*="latest-chat-reply"]` 的 `.chat-message-body` | ✅ 本机实测通过 |
 | `www.qianwen.com` | `[role="textbox"][contenteditable="true"]` | `[data-chat-answers-wrap] .qk-markdown` | ✅ 本机实测通过（首轮回复可能较慢，站点超时 10 分钟） |
@@ -174,6 +174,8 @@ config:
     'www.qianwen.com':
       cdpEndpoint: http://127.0.0.1:9223      # 360 安全浏览器
     'chat.deepseek.com':
+      cdpEndpoint: http://127.0.0.1:9223
+    'www.doubao.com':
       cdpEndpoint: http://127.0.0.1:9223
 ```
 
