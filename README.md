@@ -184,7 +184,9 @@ dsh plugin --profile desktop install "<插件目录>"
 npm run smoke        # 启动 headless Chrome + 本地假聊天页，端到端验证 CDP 连接/输入/发送/流式提取
 ```
 
-冒烟测试覆盖：工具注册、contenteditable 输入、textarea 输入、同源标签页复用、激活标签页兜底、CDP 连接失败提示。
+冒烟测试覆盖：工具注册、contenteditable 输入、textarea 输入、同源标签页复用、激活标签页兜底、新版 ChatGPT DOM、内置站点选择器解析、回复文本清洗、自定义站点 profile、CDP 连接失败提示。
+
+> 若所在网络暂时无法访问 `github.com:443`（但 `api.github.com` 正常），可用 `.\scripts\push-via-api.ps1` 通过 GitHub REST API 把当前 HEAD 同步到远端：它会复用本机保存的 git 凭据，重建 blob/tree/commit 并更新 ref，成功后把本地与远端 ref 对齐。
 
 ## 换电脑 / 迁移到新机器
 
