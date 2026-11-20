@@ -16,6 +16,8 @@
             cdpEndpoint: http://127.0.0.1:9223
           'www.doubao.com':
             cdpEndpoint: http://127.0.0.1:9223
+          'yuanbao.tencent.com':
+            cdpEndpoint: http://127.0.0.1:9223
         # 其余可选覆盖：
         #   'example-ai.com':
         #     input: ['textarea#chat-input']

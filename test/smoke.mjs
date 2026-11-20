@@ -286,6 +286,15 @@ async function testSiteSelectorProfiles() {
   assert.ok(doubao.send.includes('[data-testid="chat_input_send_button"]'))
   assert.equal(doubao.reply[0], '[data-reply-message="true"] [data-testid="message_text_content"]')
 
+  const yuanbao = resolveSiteSelectors('https://yuanbao.tencent.com/chat/naQivTmsDa', {})
+  assert.equal(yuanbao.input[0], '.ql-editor[contenteditable="true"]')
+  assert.ok(yuanbao.send.includes('[class*="sendButton"]'))
+  assert.equal(
+    yuanbao.reply[0],
+    '[class*="agent-chat__list__item--ai"][class*="--last"] [class*="hyc-common-markdown"]',
+  )
+  assert.deepEqual(yuanbao.stop, ['[aria-label*="停止"]'])
+
   // Subdomain suffix matching.
   const subdomain = resolveSiteSelectors('https://www.chatgpt.com/x', {})
   assert.ok(subdomain.reply.includes('[data-markdown-text-style="assistant-message"]'))
